@@ -1,53 +1,29 @@
-# mypy: disable-error-code="no-untyped-call, misc"
+from algosdk import algod, transaction, mnemonic
+from algosdk.kmd import KMDClient
+from algosdk.future import transaction
+from .config import Config
 
+def get_algod_client():
+    algod_token = Config.ALGOD_TOKEN
+    algod_address = Config.ALGOD_ADDRESS
+    return algod.AlgodClient(algod_token, algod_address)
 
-import logging
-from collections.abc import Callable
-from pathlib import Path
-
-from algokit_utils import (
-    Account,
-    ApplicationSpecification,
-    EnsureBalanceParameters,
-    ensure_funded,
-    get_account,
-    get_algod_client,
-    get_indexer_client,
-)
-from algosdk.util import algos_to_microalgos
-from algosdk.v2client.algod import AlgodClient
-from algosdk.v2client.indexer import IndexerClient
-
-logger = logging.getLogger(__name__)
-
-
-def deploy(
-    app_spec_path: Path,
-    deploy_callback: Callable[
-        [AlgodClient, IndexerClient, ApplicationSpecification, Account], None
-    ],
-    deployer_initial_funds: int = 2,
-) -> None:
-    # get clients
-    # by default client configuration is loaded from environment variables
+def deploy_smart_contract(compiled_contract):
     algod_client = get_algod_client()
-    indexer_client = get_indexer_client()
-
-    # get app spec
-    app_spec = ApplicationSpecification.from_json(app_spec_path.read_text())
-
-    # get deployer account by name
-    deployer = get_account(algod_client, "DEPLOYER", fund_with_algos=0)
-
-    minimum_funds_micro_algos = algos_to_microalgos(deployer_initial_funds)
-    ensure_funded(
-        algod_client,
-        EnsureBalanceParameters(
-            account_to_fund=deployer,
-            min_spending_balance_micro_algos=minimum_funds_micro_algos,
-            min_funding_increment_micro_algos=minimum_funds_micro_algos,
-        ),
+    
+    # Thực hiện các bước triển khai
+    params = algod_client.suggested_params()
+    txn = transaction.ApplicationCreateTxn(
+        sender="your_sender_address",
+        sp=params,
+        on_complete=transaction.OnComplete.NoOpOC,
+        approval_program=compiled_contract,
+        clear_program=compiled_contract,  # Có thể thay đổi thành clear program khác
+        global_schema=transaction.StateSchema(num_uints=1, num_byte_slices=0),
+        local_schema=transaction.StateSchema(num_uints=1, num_byte_slices=0)
     )
-
-    # use provided callback to deploy the app
-    deploy_callback(algod_client, indexer_client, app_spec, deployer)
+    
+    # Ký và gửi giao dịch
+    signed_txn = txn.sign("your_private_key")
+    txid = algod_client.send_transaction(signed_txn)
+    return txid
